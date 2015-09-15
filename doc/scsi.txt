@@ -1,0 +1,9 @@
+ Storage-related SCSI commands are defined mainly in the SCSI Architecture Model
+ (SAM), SCSI Primary Commands (SPC), and SCSI Block Commands (SBC):
+
+    - SAM defines the SCSI systems model, the functional partitioning of the
+      SCSI standard set, and the requirements applicable to all SCSI
+      implementations and implementation standards.
+    - SPC defines behaviors that are common to all SCSI device models.
+    - SBC defines the command set extensions to facilitate operation of SCSI
+      direct-access block devices.
