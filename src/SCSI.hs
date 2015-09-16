@@ -4,6 +4,9 @@ module SCSI where
 
 import Control.Applicative ((<$>), (<*>))
 import Foreign
+import Foreign.C
+
+-- | Linux SCSI Generic
 
 sg_dxfer_from_dev :: Int32
 sg_dxfer_from_dev = (-3)
@@ -21,9 +24,9 @@ data SG_IO_HDR = SG_IO_HDR {
     mx_sb_len       :: Word8,
     iovec_count     :: Word16,
     dxfer_len       :: Word32,
-    dxferp          :: Ptr (),
-    cmdp            :: Ptr (),
-    sbp             :: Ptr (),
+    dxferp          :: Ptr CChar,
+    cmdp            :: Ptr CChar,
+    sbp             :: Ptr CChar,
     timeout         :: Word32,
     flags           :: Word32,
     pack_id         :: Ptr (),
@@ -110,3 +113,5 @@ instance Storable SG_IO_HDR where
                 pokeByteOff ptr 0x48 resid
                 pokeByteOff ptr 0x4c duration
                 pokeByteOff ptr 0x50 info
+                
+-- | Friendly interface

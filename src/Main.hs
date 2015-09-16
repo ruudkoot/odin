@@ -2,6 +2,7 @@ module Main where
 
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad
+import qualified Data.ByteString as BS
 import Data.Char
 import Foreign
 import Foreign.C
@@ -37,12 +38,9 @@ main = do
     closeFd fd
     return ()
 
-bytesToString :: Ptr a -> Int -> Int -> IO String
+bytesToString :: BS.ByteString -> Int -> Int -> String
 bytesToString buffer start len
-    = forM [start .. start + len - 1] $ \i -> do
-        byte <- peekByteOff buffer i :: IO Word8
-        let char = chr (fromIntegral byte)
-        return char
+    = map (chr . fromIntegral) $ BS.unpack $ BS.take len $ BS.drop start buffer
 
 doScsiStuff :: Fd -> IO ()
 doScsiStuff fd = do
@@ -50,58 +48,57 @@ doScsiStuff fd = do
     let sense_len = 32
     let block_len = 512
     let cdb_len   = 6
-
-    sense_buffer <- mallocBytes        sense_len
-    data_buffer  <- mallocBytes (256 * block_len)
-    cdb          <- mallocBytes          cdb_len
     
-    pokeByteOff cdb 0 (0x12 :: Word8)
-    pokeByteOff cdb 1 (0x00 :: Word8)
-    pokeByteOff cdb 2 (0x00 :: Word8)
-    pokeByteOff cdb 3 (0x00 :: Word8)
-    pokeByteOff cdb 4 (0xff :: Word8)
-    pokeByteOff cdb 5 (0x00 :: Word8)
+    let sense_buffer = BS.replicate        sense_len  0x00
+    let data_buffer  = BS.replicate (256 * block_len) 0x00
+    let cdb          = BS.pack [0x12, 0x00, 0x00, 0x00, 0xff, 0x00]
 
-    let inquiry = SG_IO_HDR {
-            interface_id    = fromIntegral $ ord 'S',
-            dxfer_direction = sg_dxfer_from_dev,
-            cmd_len         = fromIntegral $ cdb_len,
-            mx_sb_len       = fromIntegral $ sense_len,
-            iovec_count     = 0,
-            dxfer_len       = fromIntegral $ block_len,
-            dxferp          = data_buffer,
-            cmdp            = cdb,
-            sbp             = sense_buffer,
-            timeout         = 0,
-            flags           = sg_flag_unused_lun_inhibit,
-            pack_id         = nullPtr,
-            usr_ptr         = nullPtr,
-            status          = 0,
-            masked_status   = 0,
-            msg_status      = 0,
-            sb_len_wr       = 0,
-            host_status     = 0,
-            driver_status   = 0,
-            resid           = 0,
-            duration        = 0,
-            info            = 0
-        }
+    res <- BS.useAsCStringLen sense_buffer $ \(sense_buffer', _) ->
+           BS.useAsCStringLen data_buffer $ \(data_buffer', _) ->
+           BS.useAsCStringLen cdb $ \(cdb', _) -> do
 
-    res <- ioctl fd sg_io inquiry
-    
-    if status res /= 0 then
-        print "FAILED!"
-    else do
-        vendor  <- bytesToString data_buffer  8  8
-        product <- bytesToString data_buffer 16 16
-        version <- bytesToString data_buffer 32  4
+            let inquiry = SG_IO_HDR {
+                    interface_id    = fromIntegral $ ord 'S',
+                    dxfer_direction = sg_dxfer_from_dev,
+                    cmd_len         = fromIntegral $ cdb_len,
+                    mx_sb_len       = fromIntegral $ sense_len,
+                    iovec_count     = 0,
+                    dxfer_len       = fromIntegral $ block_len,
+                    dxferp          = data_buffer',
+                    cmdp            = cdb',
+                    sbp             = sense_buffer',
+                    timeout         = 0,
+                    flags           = sg_flag_unused_lun_inhibit,
+                    pack_id         = nullPtr,
+                    usr_ptr         = nullPtr,
+                    status          = 0,
+                    masked_status   = 0,
+                    msg_status      = 0,
+                    sb_len_wr       = 0,
+                    host_status     = 0,
+                    driver_status   = 0,
+                    resid           = 0,
+                    duration        = 0,
+                    info            = 0
+                }
+
+            res <- ioctl fd sg_io inquiry
             
-        putStrLn $ "Vendor : " ++ vendor
-        putStrLn $ "Product: " ++ product
-        putStrLn $ "Version: " ++ version
+            if status res /= 0 then
+                return Nothing
+            else do
+                bs <- BS.packCStringLen (dxferp res, fromIntegral $ dxfer_len res)
+                return (Just bs)
+    
+    case res of
+        Nothing -> print "FAILED!"
+        Just data_buffer -> do
+            let vendor  = bytesToString data_buffer  8  8
+            let product = bytesToString data_buffer 16 16
+            let version = bytesToString data_buffer 32  4
+                
+            putStrLn $ "Vendor : " ++ vendor
+            putStrLn $ "Product: " ++ product
+            putStrLn $ "Version: " ++ version
 
-    free cdb
-    free data_buffer
-    free sense_buffer
-        
     return ()
