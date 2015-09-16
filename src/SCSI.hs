@@ -3,8 +3,24 @@
 module SCSI where
 
 import Control.Applicative ((<$>), (<*>))
+import qualified Data.ByteString as BS
+import Data.Char
 import Foreign
 import Foreign.C
+import System.Posix
+
+foreign import ccall "ioctl" c_ioctl :: CInt -> CInt -> Ptr () -> IO CInt
+
+-- | IO control
+
+c_ioctl' :: Storable d => Fd -> Int -> Ptr d -> IO ()
+c_ioctl' fd req p =
+    throwErrnoIfMinus1_ "ioctl" $
+        c_ioctl (fromIntegral fd) (fromIntegral req) (castPtr p)
+
+ioctl :: Storable d => Fd -> Int -> d -> IO d
+ioctl fd req d = with d $ \p -> c_ioctl' fd req p >> peek p
+
 
 -- | Linux SCSI Generic
 
@@ -115,3 +131,54 @@ instance Storable SG_IO_HDR where
                 pokeByteOff ptr 0x50 info
                 
 -- | Friendly interface
+
+data ScsiError
+    = ScsiErrorIoctl
+    | ScsiErrorSense BS.ByteString
+    deriving Show
+
+scsiCommand :: Fd -> BS.ByteString -> [Word8] -> IO (Either BS.ByteString ScsiError)
+scsiCommand fd data_buffer cdb' = do
+
+    let sense_len    = 32
+    let sense_buffer = BS.replicate sense_len  0x00
+    let cdb          = BS.pack      cdb'
+
+    res <- BS.useAsCStringLen sense_buffer $ \(sense_buffer', _) ->
+            BS.useAsCStringLen data_buffer $ \(data_buffer', data_len) ->
+             BS.useAsCStringLen cdb $ \(cdb', cdb_len) -> do
+
+                let inquiry = SG_IO_HDR {
+                        interface_id    = fromIntegral $ ord 'S',
+                        dxfer_direction = sg_dxfer_from_dev,
+                        cmd_len         = fromIntegral $ cdb_len,
+                        mx_sb_len       = fromIntegral $ sense_len,
+                        iovec_count     = 0,
+                        dxfer_len       = fromIntegral $ data_len,
+                        dxferp          = data_buffer',
+                        cmdp            = cdb',
+                        sbp             = sense_buffer',
+                        timeout         = 0,
+                        flags           = sg_flag_unused_lun_inhibit,
+                        pack_id         = nullPtr,
+                        usr_ptr         = nullPtr,
+                        status          = 0,
+                        masked_status   = 0,
+                        msg_status      = 0,
+                        sb_len_wr       = 0,
+                        host_status     = 0,
+                        driver_status   = 0,
+                        resid           = 0,
+                        duration        = 0,
+                        info            = 0
+                    }
+
+                res <- ioctl fd sg_io inquiry
+                
+                if status res /= 0 then
+                    return (Right ScsiErrorIoctl)
+                else do
+                    bs <- BS.packCStringLen (dxferp res, fromIntegral $ dxfer_len res)
+                    return (Left bs)
+
+    return res
