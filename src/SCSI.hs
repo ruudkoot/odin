@@ -1,6 +1,11 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
-module SCSI where
+module SCSI (
+    ScsiDevice,
+    ScsiError(..),
+    withScsiDevice,
+    scsiCommand
+) where
 
 import Control.Applicative ((<$>), (<*>))
 import qualified Data.ByteString as BS
@@ -132,10 +137,21 @@ instance Storable SG_IO_HDR where
                 
 -- | Friendly interface
 
+type ScsiDevice = Fd
+
 data ScsiError
     = ScsiErrorIoctl
     | ScsiErrorSense BS.ByteString
     deriving Show
+    
+withScsiDevice :: FilePath -> (ScsiDevice -> IO ()) -> IO ()
+withScsiDevice filePath f = do
+    fd <- openFd filePath ReadOnly Nothing defaultFileFlags
+    if fd > 0 then
+        f fd
+    else do
+        putStrLn $ "withScsiDevice: could not open '" ++ filePath ++ "'"
+    closeFd fd
 
 scsiCommand :: Fd -> BS.ByteString -> [Word8] -> IO (Either BS.ByteString ScsiError)
 scsiCommand fd data_buffer cdb' = do
