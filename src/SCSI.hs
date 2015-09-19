@@ -4,7 +4,11 @@ module SCSI (
     ScsiDevice,
     ScsiError(..),
     withScsiDevice,
-    scsiCommand
+    scsiCommand,
+    commandN,
+    commandR,
+    commandW,
+    commandB
 ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -152,7 +156,7 @@ withScsiDevice filePath f = do
     else do
         putStrLn $ "withScsiDevice: could not open '" ++ filePath ++ "'"
     closeFd fd
-
+    
 scsiCommand :: Fd -> BS.ByteString -> [Word8] -> IO (Either BS.ByteString ScsiError)
 scsiCommand fd data_buffer cdb' = do
 
@@ -198,3 +202,25 @@ scsiCommand fd data_buffer cdb' = do
                     return (Left bs)
 
     return res
+    
+commandN :: ScsiDevice -> [Word8] -> IO (Either () ScsiError)
+commandN device cdb
+    = do let dataIn = BS.empty
+         res <- scsiCommand device dataIn cdb 
+         return $ case res of
+            Left  _   -> Left ()
+            Right err -> Right err
+
+commandR :: ScsiDevice -> Int -> [Word8] -> IO (Either BS.ByteString ScsiError)
+commandR device n cdb
+    = let dataIn = BS.replicate n 0x00 in scsiCommand device dataIn cdb
+
+commandW :: ScsiDevice -> BS.ByteString -> [Word8] -> IO (Either () ScsiError)
+commandW device dataIn cdb
+    = do res <- scsiCommand device dataIn cdb
+         return $ case res of
+            Left  _   -> Left ()
+            Right err -> Right err
+
+commandB :: ScsiDevice -> BS.ByteString -> [Word8] -> IO (Either BS.ByteString ScsiError)
+commandB = scsiCommand
