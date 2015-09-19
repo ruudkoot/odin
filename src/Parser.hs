@@ -16,7 +16,7 @@ import Data.Bits
 import Data.ByteString hiding (reverse)
 import Data.Word
 
-data Parser t = Parser (ByteString -> (t, ByteString))
+data Parser t = Parser { unP :: ByteString -> (t, ByteString) }
 
 instance Functor Parser where
     fmap f (Parser p) = Parser $
@@ -26,6 +26,10 @@ instance Applicative Parser where
     pure x = Parser (\a -> (x, a))
     Parser p <*> Parser q = Parser $
         \a -> let (f, b) = p a in let (x, c) = q b in (f x, c)
+        
+instance Monad Parser where
+    return = pure
+    Parser p >>= k = Parser $ \a -> let (x,b) = p a in unP (k x) b
 
 bit2bool :: Word8 -> Bool
 bit2bool 0 = False

@@ -32,6 +32,10 @@ doScsiStuff device = do
     di <- readDiscInformation device
     putStrLn (show di)
     
+    header "READ TOC/PMA/ATIP"
+    res <- readFormattedToc device LBA 0
+    putStrLn (show res)
+    
     return ()
     
 header :: String -> IO ()
