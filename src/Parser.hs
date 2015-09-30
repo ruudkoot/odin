@@ -7,14 +7,16 @@ module Parser (
     word8,
     word16BE,
     word32BE,
-    word64BE
+    word64BE,
+    ascii
 ) where
 
-import Prelude hiding (drop, head, tail)
+import Prelude hiding (drop, head, tail, take)
 
 import Control.Applicative
 import Data.Bits
-import Data.ByteString hiding (reverse)
+import Data.ByteString hiding (map, reverse)
+import Data.Char
 import Data.Word
 
 data Parser t = Parser { unP :: ByteString -> (t, ByteString) }
@@ -87,4 +89,10 @@ word64BE = Parser $ \bs ->
     + fromIntegral (index bs 6) * 256
     + fromIntegral (index bs 7)
     , drop 8 bs
+    )
+    
+ascii :: Int -> Parser String
+ascii len = Parser $ \bs ->
+    ( map (chr . fromIntegral) $ unpack $ take len bs
+    , drop len bs
     )
