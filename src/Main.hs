@@ -14,19 +14,20 @@ import SCSI.MMC
 
 main :: IO ()
 main = do
-    [filePath] <- getArgs
-    withScsiDevice filePath doScsiStuff
+    [filePath, command] <- getArgs
+    withScsiDevice filePath $ case command of
+        "info"          -> doInfo
+        "quickblank"    -> doQuickBlank
     return ()
 
-bytesToString :: BS.ByteString -> Int -> Int -> String
-bytesToString buffer start len
-    = map (chr . fromIntegral) $ BS.unpack $ BS.take len $ BS.drop start buffer
+header :: String -> IO ()
+header h = putStrLn $ "== " ++ h ++ " " ++ replicate (76 - length h) '='
 
-doScsiStuff :: ScsiDevice -> IO ()
-doScsiStuff device = do
+doInfo :: ScsiDevice -> IO ()
+doInfo device = do
 
     header "INQUIRE"
-    inquire             device
+    inquire device
 
     header "READ DISC INFORMATION"
     di <- readDiscInformation device
@@ -36,12 +37,18 @@ doScsiStuff device = do
     res <- readFormattedToc device LBA 0
     putStrLn (show res)
     
-    return ()
-    
-header :: String -> IO ()
-header h = putStrLn $ "== " ++ h ++ " " ++ replicate (76 - length h) '='
-    
+doQuickBlank :: ScsiDevice -> IO ()
+doQuickBlank device = do
+    putStrLn "start"
+    res <- blank device BlankMinimal False
+    putStrLn "done"
+    putStrLn (show res)
+   
 -- * INQUIRE
+
+bytesToString :: BS.ByteString -> Int -> Int -> String
+bytesToString buffer start len
+    = map (chr . fromIntegral) $ BS.unpack $ BS.take len $ BS.drop start buffer
     
 inquire :: ScsiDevice -> IO ()
 inquire scsiDevice = do

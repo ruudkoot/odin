@@ -144,13 +144,13 @@ instance Storable SG_IO_HDR where
 type ScsiDevice = Fd
 
 data ScsiError
-    = ScsiErrorIoctl
+    = ScsiErrorIoctl Word8
     | ScsiErrorSense BS.ByteString
     deriving Show
     
 withScsiDevice :: FilePath -> (ScsiDevice -> IO ()) -> IO ()
 withScsiDevice filePath f = do
-    fd <- openFd filePath ReadOnly Nothing defaultFileFlags
+    fd <- openFd filePath ReadWrite Nothing defaultFileFlags
     if fd > 0 then
         f fd
     else do
@@ -196,7 +196,7 @@ scsiCommand fd data_buffer cdb' = do
                 res <- ioctl fd sg_io inquiry
                 
                 if status res /= 0 then
-                    return (Right ScsiErrorIoctl)
+                    return (Right (ScsiErrorIoctl (status res)))
                 else do
                     bs <- BS.packCStringLen (dxferp res, fromIntegral $ dxfer_len res)
                     return (Left bs)

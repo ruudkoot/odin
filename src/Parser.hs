@@ -1,6 +1,7 @@
 module Parser (
     Parser,
     bit2bool,
+    bigEndian,
     runParser,
     bits8,
     word8,
@@ -34,6 +35,14 @@ instance Monad Parser where
 bit2bool :: Word8 -> Bool
 bit2bool 0 = False
 bit2bool 1 = True
+
+bigEndian :: Word32 -> [Word8]
+bigEndian w =
+    [ fromIntegral $ shiftR w 24
+    , fromIntegral $ shiftR w 16
+    , fromIntegral $ shiftR w  8
+    , fromIntegral $        w
+    ]
 
 runParser :: Parser a -> ByteString -> a
 runParser (Parser p) = fst . p
