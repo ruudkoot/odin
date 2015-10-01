@@ -67,6 +67,7 @@ data SG_IO_HDR = SG_IO_HDR {
     info            :: Word32
 }
 
+-- FIXME: currently 64-bit only!
 instance Storable SG_IO_HDR where
     alignment _   = 8
     sizeOf    _   = 88
@@ -161,8 +162,12 @@ scsiCommand :: Fd -> BS.ByteString -> [Word8] -> IO (Either BS.ByteString ScsiEr
 scsiCommand fd data_buffer cdb' = do
 
     let sense_len    = 32
-    let sense_buffer = BS.replicate sense_len  0x00
-    let cdb          = BS.pack      cdb'
+    let sense_buffer = BS.replicate sense_len 0x00
+    let cdb          =
+            if length cdb' `elem` [6, 10, 12] then
+                BS.pack cdb'
+            else
+                error "scsiCommand: CDB should be 6, 10 or 12 bytes long"
 
     res <- BS.useAsCStringLen sense_buffer $ \(sense_buffer', _) ->
             BS.useAsCStringLen data_buffer $ \(data_buffer', data_len) ->
