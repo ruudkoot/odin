@@ -36,8 +36,12 @@ ioctl fd req d = with d $ \p -> c_ioctl' fd req p >> peek p
 
 -- | Linux SCSI Generic
 
-sg_dxfer_from_dev :: Int32
-sg_dxfer_from_dev = (-3)
+sg_dxfer_none, sg_dxfer_to_dev, sg_dxfer_from_dev, sg_dxfer_to_from_dev :: Int32
+sg_dxfer_none           = (-1)
+sg_dxfer_to_dev         = (-2)
+sg_dxfer_from_dev       = (-3)
+sg_dxfer_to_from_dev    = (-4)
+-- sg_dxfer_unknown        = (-5)
 
 sg_flag_unused_lun_inhibit :: Word32
 sg_flag_unused_lun_inhibit = 2
@@ -160,8 +164,8 @@ withScsiDevice filePath f = do
         putStrLn $ "withScsiDevice: could not open '" ++ filePath ++ "'"
     closeFd fd
     
-scsiCommand :: Fd -> BS.ByteString -> [Word8] -> IO (Either BS.ByteString ScsiError)
-scsiCommand fd data_buffer cdb' = do
+scsiCommand :: Fd -> Int32 -> BS.ByteString -> [Word8] -> IO (Either BS.ByteString ScsiError)
+scsiCommand fd dir data_buffer cdb' = do
 
     let sense_len    = 252
     let sense_buffer = BS.replicate sense_len 0x00
@@ -177,12 +181,15 @@ scsiCommand fd data_buffer cdb' = do
 
                 let inquiry = SG_IO_HDR {
                         interface_id    = fromIntegral $ ord 'S',
-                        dxfer_direction = sg_dxfer_from_dev,
+                        dxfer_direction = dir,
                         cmd_len         = fromIntegral $ cdb_len,
                         mx_sb_len       = fromIntegral $ sense_len,
                         iovec_count     = 0,
                         dxfer_len       = fromIntegral $ data_len,
-                        dxferp          = data_buffer',
+                        dxferp          = if dir == sg_dxfer_none then
+                                            nullPtr
+                                          else
+                                            data_buffer',
                         cmdp            = cdb',
                         sbp             = sense_buffer',
                         timeout         = 0,
@@ -216,21 +223,22 @@ scsiCommand fd data_buffer cdb' = do
 commandN :: ScsiDevice -> [Word8] -> IO (Either () ScsiError)
 commandN device cdb
     = do let dataIn = BS.empty
-         res <- scsiCommand device dataIn cdb 
+         res <- scsiCommand device sg_dxfer_none dataIn cdb 
          return $ case res of
             Left  _   -> Left ()
             Right err -> Right err
 
 commandR :: ScsiDevice -> Int -> [Word8] -> IO (Either BS.ByteString ScsiError)
 commandR device n cdb
-    = let dataIn = BS.replicate n 0x00 in scsiCommand device dataIn cdb
+    = let dataIn = BS.replicate n 0x00
+       in scsiCommand device sg_dxfer_from_dev dataIn cdb
 
 commandW :: ScsiDevice -> BS.ByteString -> [Word8] -> IO (Either () ScsiError)
 commandW device dataIn cdb
-    = do res <- scsiCommand device dataIn cdb
+    = do res <- scsiCommand device sg_dxfer_to_dev dataIn cdb
          return $ case res of
             Left  _   -> Left ()
             Right err -> Right err
 
 commandB :: ScsiDevice -> BS.ByteString -> [Word8] -> IO (Either BS.ByteString ScsiError)
-commandB = scsiCommand
+commandB device = scsiCommand device sg_dxfer_to_from_dev

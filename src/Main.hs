@@ -29,6 +29,10 @@ header h = putStrLn $ "== " ++ h ++ " " ++ replicate (76 - length h) '='
 doInfo :: ScsiDevice -> IO ()
 doInfo device = do
 
+    header "TEST UNIT READY"
+    res <- testUnitReady device
+    putStrLn (show res)
+
     header "INQUIRE"
     inq <- inquiry device
     putStrLn (show inq)
@@ -37,7 +41,7 @@ doInfo device = do
         -- FIXME: Linux lies...
         -- MultiMedia -> do
         DirectAccessBlock -> do
-        
+
             header "READ CAPACITY"
             res <- readCapacity device
             putStrLn (show res)
