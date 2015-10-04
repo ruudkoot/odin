@@ -1,4 +1,7 @@
-module SCSI.MMC.ReadCapacity where
+module SCSI.MMC.ReadCapacity (
+    Capacity(..),
+    readCapacity
+) where
 
 import Control.Applicative ((<$>), (<*>))
 import Data.Word
