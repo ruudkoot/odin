@@ -207,10 +207,10 @@ scsiCommand fd data_buffer cdb' = do
                         bs <- BS.packCStringLen (dxferp res, fromIntegral $ dxfer_len res)
                         return (Left bs)
                     1 -> do
-                        bs <- BS.packCStringLen (sbp res, fromIntegral $ sb_len_wr res)
-                        let sd = runParser parseSenseData bs
+                        sd <- runParser parseSenseData <$> BS.packCStringLen
+                                (sbp res, fromIntegral $ sb_len_wr res)
                         return (Right (ScsiErrorSense sd))
-    
+
     return res
     
 commandN :: ScsiDevice -> [Word8] -> IO (Either () ScsiError)
