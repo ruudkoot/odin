@@ -18,6 +18,9 @@ import Foreign
 import Foreign.C
 import System.Posix
 
+import Parser
+import SCSI.Sense
+
 foreign import ccall "ioctl" c_ioctl :: CInt -> CInt -> Ptr () -> IO CInt
 
 -- | IO control
@@ -145,9 +148,8 @@ instance Storable SG_IO_HDR where
 type ScsiDevice = Fd
 
 data ScsiError
-    = ScsiErrorIoctl Word8
-    | ScsiErrorSense BS.ByteString
-    deriving Show
+    = ScsiErrorSense SenseData
+  deriving Show
     
 withScsiDevice :: FilePath -> (ScsiDevice -> IO ()) -> IO ()
 withScsiDevice filePath f = do
@@ -161,7 +163,7 @@ withScsiDevice filePath f = do
 scsiCommand :: Fd -> BS.ByteString -> [Word8] -> IO (Either BS.ByteString ScsiError)
 scsiCommand fd data_buffer cdb' = do
 
-    let sense_len    = 32
+    let sense_len    = 252
     let sense_buffer = BS.replicate sense_len 0x00
     let cdb          =
             if length cdb' `elem` [6, 10, 12] then
@@ -200,12 +202,15 @@ scsiCommand fd data_buffer cdb' = do
 
                 res <- ioctl fd sg_io inquiry
                 
-                if status res /= 0 then
-                    return (Right (ScsiErrorIoctl (status res)))
-                else do
-                    bs <- BS.packCStringLen (dxferp res, fromIntegral $ dxfer_len res)
-                    return (Left bs)
-
+                case masked_status res of
+                    0 -> do
+                        bs <- BS.packCStringLen (dxferp res, fromIntegral $ dxfer_len res)
+                        return (Left bs)
+                    1 -> do
+                        bs <- BS.packCStringLen (sbp res, fromIntegral $ sb_len_wr res)
+                        let sd = runParser parseSenseData bs
+                        return (Right (ScsiErrorSense sd))
+    
     return res
     
 commandN :: ScsiDevice -> [Word8] -> IO (Either () ScsiError)
