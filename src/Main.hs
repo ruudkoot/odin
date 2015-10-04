@@ -32,7 +32,13 @@ doInfo device = do
     putStrLn (show inq)
 
     case deviceType inq of
-        MultiMedia -> do
+        -- FIXME: Linux lies...
+        -- MultiMedia -> do
+        DirectAccessBlock -> do
+        
+            header "READ CAPACITY"
+            res <- readCapacity device
+            putStrLn (show res)
 
             header "READ DISC INFORMATION"
             di <- readDiscInformation device

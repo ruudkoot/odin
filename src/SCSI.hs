@@ -151,7 +151,7 @@ data ScsiError
     
 withScsiDevice :: FilePath -> (ScsiDevice -> IO ()) -> IO ()
 withScsiDevice filePath f = do
-    fd <- openFd filePath ReadWrite Nothing defaultFileFlags
+    fd <- openFd filePath ReadOnly Nothing defaultFileFlags
     if fd > 0 then
         f fd
     else do
